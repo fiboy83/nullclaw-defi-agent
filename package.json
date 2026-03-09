@@ -1,0 +1,25 @@
+{
+  "name": "nullclaw-defi-agent",
+  "version": "0.1.0",
+  "description": "Autonomous DeFi Agent powered by NullClaw (Zig) + Tether WDK -- Hackathon Galactica submission",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:sidecar\" \"npm run dev:ui\"",
+    "dev:ui": "cd ui && npm run dev",
+    "dev:sidecar": "cd sidecar && node --watch server.js",
+    "build:ui": "cd ui && npm run build",
+    "start": "node start.js",
+    "start:agent": "chmod +x ./nullclaw && ./nullclaw --config ./agent/config.json",
+    "start:sidecar": "cd sidecar && node server.js",
+    "start:ui": "cd ui && npm run preview",
+    "setup": "cd sidecar && npm install && cd ../ui && npm install"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
