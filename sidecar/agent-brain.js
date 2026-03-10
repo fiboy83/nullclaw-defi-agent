@@ -2,7 +2,7 @@
  * NullClaw Agent Brain -- LLM-Powered Autonomous DeFi Decision Engine
  * 
  * This is the core intelligence layer that makes NullClaw an "agent" not just a "tool".
- * Uses OpenAI GPT to analyze portfolio state + market conditions and propose
+ * Uses LLM (Groq/OpenAI compatible) to analyze portfolio state + market conditions and propose
  * autonomous DeFi actions with human-in-the-loop confirmation.
  * 
  * Decision types:
@@ -17,7 +17,8 @@ import OpenAI from 'openai';
 import * as wdkManager from './wdk-manager.js';
 
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY || '',
+  apiKey: process.env.AI_API_KEY || '',
+  baseURL: process.env.AI_BASE_URL || 'https://api.groq.com/openai/v1',
 });
 
 // Decision history (in-memory, persists per session)
@@ -37,7 +38,7 @@ const AGENT_CONFIG = {
     maxSingleTradePercent: 0.2, // Max 20% of portfolio per trade
     minBalanceKeep: 0.01, // Always keep some gas
   },
-  model: process.env.LLM_MODEL || 'gpt-4o-mini',
+  model: process.env.LLM_MODEL || 'llama-3.3-70b-versatile',
 };
 
 /**
@@ -82,8 +83,8 @@ Respond ONLY with valid JSON in this exact format:
  * This is the main brain loop
  */
 export async function analyze(broadcastFn = null) {
-  if (!process.env.OPENAI_API_KEY) {
-    console.log('[BRAIN] No OPENAI_API_KEY set, skipping analysis');
+  if (!process.env.AI_API_KEY) {
+    console.log('[BRAIN] No AI_API_KEY set, skipping analysis');
     return null;
   }
 
