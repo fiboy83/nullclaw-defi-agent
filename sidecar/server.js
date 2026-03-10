@@ -3,7 +3,13 @@
  * Express + WebSocket backend with WDK multi-chain wallet + LLM agent brain
  */
 
-import 'dotenv/config';
+import dotenv from 'dotenv';
+import { fileURLToPath } from 'url';
+import { dirname, resolve } from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+dotenv.config({ path: resolve(__dirname, '../.env') });
 import express from 'express';
 import { createServer } from 'http';
 import { WebSocketServer } from 'ws';
