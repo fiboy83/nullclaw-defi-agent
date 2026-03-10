@@ -1,152 +1,70 @@
 /**
  * NullClaw WDK Solana Integration Layer
- * Real Tether WDK SDK -- Solana chain operations
- * Supports: Wallet, SOL transfers, SPL token transfers
+ * Receives a pre-initialized WalletAccountSolana from wdk-manager.js
+ * Supports: SOL transfers, SPL token transfers
  */
 
-import WalletManagerSolana from '@tetherto/wdk-wallet-solana';
-
-// Solana Devnet known token mints
-const SPL_TOKENS = {
-  USDT: process.env.SOL_USDT_MINT || 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB',
-  USDC: process.env.SOL_USDC_MINT || '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU',
-};
-
-let walletManager = null;
 let primaryAccount = null;
 
 /**
- * Initialize Solana wallet from seed phrase
+ * Receive pre-initialized account from wdk-manager
+ * Account is created via: wdk.getAccount('solana', 0)
  */
-export async function initWallet(seedPhrase) {
-  const rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.devnet.solana.com';
-
-  try {
-    walletManager = new WalletManagerSolana(seedPhrase, {
-      provider: rpcUrl,
-    });
-
-    // Derive primary account at Solana path m/44'/501'/0'/0'
-    primaryAccount = walletManager.getAccount(0);
-    const address = await primaryAccount.getAddress();
-
-    console.log(`[WDK-SOL] Wallet initialized on Devnet`);
-    console.log(`[WDK-SOL] Address: ${address}`);
-
-    return {
-      address,
-      chain: 'solana',
-      network: 'devnet',
-    };
-  } catch (err) {
-    console.error('[WDK-SOL] Init failed:', err.message);
-    throw err;
-  }
+export function initWithAccount(account) {
+  primaryAccount = account;
+  console.log('[WDK-SOL] Account received from WDK core');
 }
 
-/**
- * Get wallet address
- */
 export async function getAddress() {
   if (!primaryAccount) throw new Error('Solana wallet not initialized');
   return primaryAccount.getAddress();
 }
 
-/**
- * Get all balances (native SOL + SPL tokens)
- */
 export async function getBalances() {
   if (!primaryAccount) throw new Error('Solana wallet not initialized');
-
   const address = await primaryAccount.getAddress();
   const balances = { SOL: '0' };
-
   try {
-    // Native SOL balance
     const solBalance = await primaryAccount.getBalance();
-    balances.SOL = formatLamports(solBalance);
-  } catch (e) {
-    console.warn('[WDK-SOL] SOL balance error:', e.message);
-  }
-
-  // SPL token balances
-  for (const [symbol, mint] of Object.entries(SPL_TOKENS)) {
+    balances.SOL = formatBalance(solBalance, 9);
+  } catch (e) { console.warn('[WDK-SOL] SOL balance error:', e.message); }
+  const splTokens = {
+    USDT: process.env.SOL_USDT_ADDRESS,
+    USDC: process.env.SOL_USDC_ADDRESS,
+  };
+  for (const [symbol, mint] of Object.entries(splTokens)) {
+    if (!mint) continue;
     try {
       const balance = await primaryAccount.getTokenBalance(mint);
-      const decimals = 6; // USDT and USDC are 6 decimals on Solana
-      balances[symbol] = formatBalance(balance, decimals);
-    } catch (e) {
-      balances[symbol] = '0';
-    }
+      balances[symbol] = formatBalance(balance, 6);
+    } catch (e) { balances[symbol] = '0'; }
   }
-
   return { address, chain: 'solana', network: 'devnet', balances };
 }
 
-/**
- * Send native SOL
- */
 export async function sendTransaction({ to, amount, token = 'SOL' }) {
   if (!primaryAccount) throw new Error('Solana wallet not initialized');
-
   try {
     let result;
-
     if (token === 'SOL') {
-      // Native SOL transfer
-      const lamports = parseSol(amount);
-      result = await primaryAccount.sendTransaction({
-        to,
-        value: lamports.toString(),
-      });
+      result = await primaryAccount.transfer({ to, amount: parseBalance(amount, 9) });
     } else {
-      // SPL token transfer
-      const mint = SPL_TOKENS[token];
-      if (!mint) throw new Error(`Unknown SPL token: ${token}`);
-      const parsedAmount = parseBalance(amount, 6);
-      result = await primaryAccount.sendToken(mint, to, parsedAmount);
+      const mintMap = { USDT: process.env.SOL_USDT_ADDRESS, USDC: process.env.SOL_USDC_ADDRESS };
+      const mint = mintMap[token];
+      if (!mint) throw new Error('Unknown SPL token: ' + token);
+      result = await primaryAccount.transfer({ to, amount: parseBalance(amount, 6), token: mint });
     }
-
-    console.log(`[WDK-SOL] Sent ${amount} ${token} to ${to} -> tx: ${result.hash}`);
-    return {
-      success: true,
-      txHash: result.hash,
-      fee: result.fee?.toString(),
-      from: await primaryAccount.getAddress(),
-      to,
-      amount,
-      token,
-      chain: 'solana',
-      timestamp: new Date().toISOString(),
-    };
+    const from = await primaryAccount.getAddress();
+    console.log('[WDK-SOL] Sent ' + amount + ' ' + token + ' to ' + to + ' -> tx: ' + result.hash);
+    return { success: true, txHash: result.hash, fee: result.fee?.toString(), from, to, amount, token, chain: 'solana', timestamp: new Date().toISOString() };
   } catch (err) {
-    console.error(`[WDK-SOL] Send failed:`, err.message);
+    console.error('[WDK-SOL] Send failed:', err.message);
     return { success: false, error: err.message };
   }
 }
 
-/**
- * Get protocol status
- */
 export function getProtocolStatus() {
-  return {
-    wallet: !!primaryAccount,
-    // Solana DeFi protocols can be added later
-    // (Raydium swap, Marinade staking, etc.)
-    swap: false,
-    lending: false,
-    bridge: false,
-  };
-}
-
-// -- Helpers --
-
-function formatLamports(lamports) {
-  if (!lamports) return '0';
-  const str = lamports.toString().padStart(10, '0');
-  const whole = str.slice(0, -9) || '0';
-  const frac = str.slice(-9).replace(/0+$/, '');
-  return frac ? `${whole}.${frac}` : whole;
+  return { wallet: !!primaryAccount };
 }
 
 function formatBalance(raw, decimals) {
@@ -154,13 +72,7 @@ function formatBalance(raw, decimals) {
   const str = raw.toString().padStart(decimals + 1, '0');
   const whole = str.slice(0, -decimals) || '0';
   const frac = str.slice(-decimals).replace(/0+$/, '');
-  return frac ? `${whole}.${frac}` : whole;
-}
-
-function parseSol(amount) {
-  const [whole, frac = ''] = amount.toString().split('.');
-  const paddedFrac = frac.padEnd(9, '0').slice(0, 9);
-  return BigInt(whole + paddedFrac);
+  return frac ? whole + '.' + frac : whole;
 }
 
 function parseBalance(amount, decimals) {
@@ -168,5 +80,3 @@ function parseBalance(amount, decimals) {
   const paddedFrac = frac.padEnd(decimals, '0').slice(0, decimals);
   return BigInt(whole + paddedFrac);
 }
-
-export { SPL_TOKENS };
