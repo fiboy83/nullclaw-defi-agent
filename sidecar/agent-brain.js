@@ -28,9 +28,10 @@ const MAX_HISTORY = 100;
 // Pending decisions awaiting user confirmation
 const pendingDecisions = new Map();
 
-// Anti-spam: log-once + cooldown
+// Anti-spam: log-once + exponential backoff
 let _consecutiveFailures = 0;
 let _apiKeyWarningLogged = false;
+let _backoffUntil = 0; // timestamp: skip analysis until this time
 
 // Agent configuration
 const AGENT_CONFIG = {
@@ -95,10 +96,17 @@ export async function analyze(broadcastFn = null) {
     return null;
   }
 
-  // Cooldown: after 3 consecutive failures, skip one cycle then reset
+  // Exponential backoff: after 3 failures, wait increasingly longer
+  if (Date.now() < _backoffUntil) {
+    return null; // silently skip, already logged when backoff started
+  }
+
   if (_consecutiveFailures >= 3) {
-    console.log('[BRAIN] Cooldown after 3 consecutive failures, will retry next cycle');
-    _consecutiveFailures = 0;
+    // Double backoff each time: 5min -> 10min -> 20min -> ... cap at 30min
+    const backoffMs = Math.min(5 * 60_000 * Math.pow(2, _consecutiveFailures - 3), 30 * 60_000);
+    const backoffMin = Math.round(backoffMs / 60_000);
+    console.log(`[BRAIN] ${_consecutiveFailures} consecutive failures. Backing off ${backoffMin}min before retry.`);
+    _backoffUntil = Date.now() + backoffMs;
     return null;
   }
 
@@ -170,12 +178,16 @@ export async function analyze(broadcastFn = null) {
 
     console.log(`[BRAIN] Analysis complete: ${decisions.length} decisions, health: ${response.portfolioHealth}`);
     _consecutiveFailures = 0; // reset on success
+    _backoffUntil = 0;
     return result;
   } catch (err) {
     _consecutiveFailures++;
-    if (_consecutiveFailures <= 1) {
+    if (_consecutiveFailures === 1) {
       console.error('[BRAIN] Analysis failed:', err.message);
+    } else if (_consecutiveFailures === 3) {
+      console.warn(`[BRAIN] Analysis failed ${_consecutiveFailures}x: ${err.message}. Entering backoff.`);
     }
+    // else: stay silent during backoff ramp-up
     return { error: err.message };
   }
 }
