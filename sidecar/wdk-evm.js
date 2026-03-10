@@ -4,10 +4,10 @@
  * Supports: Wallet, Swap (Velora), Lending (Aave), Bridge (USDT0)
  */
 
-import { WalletManagerEvm, WalletAccountEvm } from '@tetherto/wdk-wallet-evm';
+import WalletManagerEvm, { WalletAccountEvm } from '@tetherto/wdk-wallet-evm';
 import VeloraProtocolEvm from '@tetherto/wdk-protocol-swap-velora-evm';
 import AaveProtocolEvm from '@tetherto/wdk-protocol-lending-aave-evm';
-import BridgeProtocolEvm from '@tetherto/wdk-protocol-bridge-usdt0-evm';
+import Usdt0ProtocolEvm from '@tetherto/wdk-protocol-bridge-usdt0-evm';
 
 // Sepolia testnet token addresses
 const TOKENS = {
@@ -80,7 +80,7 @@ async function initProtocols() {
 
   try {
     // USDT0 bridge protocol
-    bridgeProtocol = new BridgeProtocolEvm(primaryAccount);
+    bridgeProtocol = new Usdt0ProtocolEvm(primaryAccount);
     console.log('[WDK-EVM] USDT0 bridge protocol ready');
   } catch (e) {
     console.warn('[WDK-EVM] Bridge init skipped:', e.message);
