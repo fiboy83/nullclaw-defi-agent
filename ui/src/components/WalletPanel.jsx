@@ -1,128 +1,167 @@
-/**
- * WalletPanel - WDK wallet balances and DeFi positions
- */
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 
-const TOKEN_META = {
-  USDT: { icon: '\uD83D\uDCB5', name: 'Tether USD', color: '#26A17B' },
-  XAUT: { icon: '\uD83E\uDE99', name: 'Tether Gold', color: '#FFD700' },
-  ETH: { icon: '\u2B21', name: 'Ethereum', color: '#627EEA' },
-};
+const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 export default function WalletPanel() {
-  const [balances, setBalances] = useState(null);
-  const [positions, setPositions] = useState([]);
+  const [activeChain, setActiveChain] = useState('all');
+  const [portfolio, setPortfolio] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [toastMsg, setToastMsg] = useState('');
+  const [error, setError] = useState(null);
+  const [sendForm, setSendForm] = useState({ chain: 'evm', to: '', amount: '', token: 'ETH' });
+  const [sending, setSending] = useState(false);
 
-  const fetchData = useCallback(async () => {
+  useEffect(() => {
+    fetchPortfolio();
+    const interval = setInterval(fetchPortfolio, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  async function fetchPortfolio() {
     try {
-      const [balRes, posRes] = await Promise.all([
-        fetch('/api/wallet/balances').then((r) => r.json()),
-        fetch('/api/defi/positions').then((r) => r.json()),
-      ]);
-      if (balRes.success) setBalances(balRes.data);
-      if (posRes.success) setPositions(posRes.data);
+      const res = await fetch(`${API}/api/wallet/portfolio`);
+      const data = await res.json();
+      if (data.success) setPortfolio(data.data);
+      else setError(data.error);
     } catch (e) {
-      console.warn('Wallet data fetch failed:', e);
+      setError('Cannot connect to sidecar');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  async function handleSend(e) {
+    e.preventDefault();
+    setSending(true);
+    try {
+      const res = await fetch(`${API}/api/wallet/send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(sendForm),
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(`Sent! TX: ${data.txHash}`);
+        fetchPortfolio();
+      } else {
+        alert(`Failed: ${data.error}`);
+      }
+    } catch (e) {
+      alert(`Error: ${e.message}`);
+    } finally {
+      setSending(false);
+    }
+  }
 
-  const showToast = (msg) => {
-    setToastMsg(msg);
-    setTimeout(() => setToastMsg(''), 3000);
-  };
+  if (loading) return <div className="panel wallet-panel"><h3>Wallet</h3><p className="loading">Connecting to WDK...</p></div>;
+  if (error) return <div className="panel wallet-panel"><h3>Wallet</h3><p className="error">{error}</p></div>;
+
+  const chains = portfolio?.chains || {};
+  const totalTokens = portfolio?.totalTokens || {};
 
   return (
-    <div className="wallet-panel">
-      <h2 className="panel-title">
-        <span className="panel-icon">\uD83D\uDCB0</span> Wallet
-      </h2>
+    <div className="panel wallet-panel">
+      <h3>Multi-Chain Wallet</h3>
 
-      <button
-        className="btn btn-connect"
-        onClick={() => showToast('WDK integration coming soon')}
-      >
-        <span className="btn-icon">\uD83D\uDD17</span>
-        Connect Wallet
-      </button>
+      {/* Chain tabs */}
+      <div className="chain-tabs">
+        {['all', 'evm', 'solana'].map((tab) => (
+          <button
+            key={tab}
+            className={`chain-tab ${activeChain === tab ? 'active' : ''}`}
+            onClick={() => setActiveChain(tab)}
+          >
+            {tab === 'all' ? 'All Chains' : tab === 'evm' ? 'EVM (Sepolia)' : 'Solana (Devnet)'}
+          </button>
+        ))}
+      </div>
 
+      {/* Balances */}
       <div className="balances-section">
-        <h3 className="section-title">Holdings</h3>
-        {loading ? (
-          <div className="loading-shimmer">Loading balances...</div>
-        ) : balances ? (
-          <div className="balance-list">
-            {Object.entries(balances).map(([token, amount]) => {
-              const meta = TOKEN_META[token] || { icon: '\uD83D\uDCB1', name: token, color: '#888' };
-              return (
-                <div key={token} className="balance-row">
-                  <div className="balance-token">
-                    <span className="token-icon" style={{ color: meta.color }}>
-                      {meta.icon}
-                    </span>
-                    <div className="token-info">
-                      <span className="token-symbol">{token}</span>
-                      <span className="token-name">{meta.name}</span>
-                    </div>
-                  </div>
-                  <div className="balance-amount">
-                    <span className="amount-value">{amount}</span>
-                  </div>
+        {activeChain === 'all' ? (
+          <>
+            <h4>Cross-Chain Portfolio</h4>
+            <div className="token-grid">
+              {Object.entries(totalTokens).map(([token, info]) => (
+                <div key={token} className="token-card">
+                  <span className="token-symbol">{token}</span>
+                  <span className="token-amount">{Number(info.total).toFixed(6)}</span>
+                  <span className="token-chains">
+                    {Object.entries(info.chains)
+                      .filter(([, a]) => a > 0)
+                      .map(([c]) => c)
+                      .join(', ')}
+                  </span>
                 </div>
-              );
-            })}
-          </div>
+              ))}
+            </div>
+          </>
         ) : (
-          <div className="empty-state">No wallet connected</div>
+          <>
+            <div className="chain-info">
+              <span className={`chain-status ${chains[activeChain]?.status === 'active' ? 'active' : 'error'}`}>
+                {chains[activeChain]?.status || 'unknown'}
+              </span>
+              <code className="chain-address">{chains[activeChain]?.address || 'N/A'}</code>
+            </div>
+            <div className="token-grid">
+              {chains[activeChain]?.balances &&
+                Object.entries(chains[activeChain].balances).map(([token, amount]) => (
+                  <div key={token} className="token-card">
+                    <span className="token-symbol">{token}</span>
+                    <span className="token-amount">{amount}</span>
+                  </div>
+                ))}
+            </div>
+          </>
         )}
       </div>
 
-      <div className="positions-section">
-        <h3 className="section-title">Active Positions</h3>
-        {positions.length > 0 ? (
-          <div className="position-list">
-            {positions.map((pos) => (
-              <div key={pos.id} className="position-card">
-                <div className="position-header">
-                  <span className="position-protocol">{pos.protocol}</span>
-                </div>
-                <div className="position-details">
-                  <div className="position-row">
-                    <span className="label">Asset</span>
-                    <span className="value">{pos.token || pos.pair}</span>
-                  </div>
-                  <div className="position-row">
-                    <span className="label">Amount</span>
-                    <span className="value">${pos.amount}</span>
-                  </div>
-                  <div className="position-row">
-                    <span className="label">APY</span>
-                    <span className="value accent">{pos.apy}</span>
-                  </div>
-                  <div className="position-row">
-                    <span className="label">Earned</span>
-                    <span className="value earned">+${pos.earned}</span>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="empty-state">No active positions</div>
-        )}
-      </div>
+      {/* Send form */}
+      <details className="send-section">
+        <summary>Send Tokens</summary>
+        <form onSubmit={handleSend} className="send-form">
+          <select value={sendForm.chain} onChange={(e) => setSendForm({ ...sendForm, chain: e.target.value })}>
+            <option value="evm">EVM (Sepolia)</option>
+            <option value="solana">Solana (Devnet)</option>
+          </select>
+          <input
+            type="text"
+            placeholder="Recipient address"
+            value={sendForm.to}
+            onChange={(e) => setSendForm({ ...sendForm, to: e.target.value })}
+            required
+          />
+          <input
+            type="text"
+            placeholder="Amount"
+            value={sendForm.amount}
+            onChange={(e) => setSendForm({ ...sendForm, amount: e.target.value })}
+            required
+          />
+          <input
+            type="text"
+            placeholder="Token (ETH, SOL, USDT...)"
+            value={sendForm.token}
+            onChange={(e) => setSendForm({ ...sendForm, token: e.target.value })}
+          />
+          <button type="submit" disabled={sending}>{sending ? 'Sending...' : 'Send'}</button>
+        </form>
+      </details>
 
-      {toastMsg && (
-        <div className="toast">
-          <span className="toast-icon">\u2139\uFE0F</span>
-          {toastMsg}
+      {/* Protocol status */}
+      {portfolio?.protocols && (
+        <div className="protocol-status">
+          <h4>Protocols</h4>
+          {Object.entries(portfolio.protocols).map(([chain, status]) => (
+            <div key={chain} className="protocol-row">
+              <span>{chain}:</span>
+              {Object.entries(status).map(([proto, active]) => (
+                <span key={proto} className={`proto-badge ${active ? 'active' : ''}`}>
+                  {proto}
+                </span>
+              ))}
+            </div>
+          ))}
         </div>
       )}
     </div>
