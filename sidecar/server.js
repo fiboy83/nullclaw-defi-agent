@@ -198,10 +198,10 @@ async function boot() {
   console.log('========================================\n');
 
   // Initialize WDK wallets
-  const seedPhrase = process.env.SEED_PHRASE;
-  if (seedPhrase) {
+  const mnemonic = process.env.WDK_MNEMONIC;
+  if (mnemonic) {
     try {
-      const result = await wdkManager.initAll(seedPhrase);
+      const result = await wdkManager.initAll(mnemonic);
       console.log('[BOOT] WDK initialized:', JSON.stringify(result.chains, null, 2));
       broadcast('wdk:ready', result);
     } catch (err) {
@@ -209,8 +209,8 @@ async function boot() {
       console.log('[BOOT] Running in limited mode (no wallet operations)');
     }
   } else {
-    console.warn('[BOOT] No SEED_PHRASE set. WDK wallet disabled.');
-    console.log('[BOOT] Set SEED_PHRASE in .env to enable wallet features.');
+    console.warn('[BOOT] No WDK_MNEMONIC set. WDK wallet disabled.');
+    console.log('[BOOT] Set WDK_MNEMONIC in .env to enable wallet features.');
   }
 
   // Start HTTP + WebSocket server
@@ -221,11 +221,11 @@ async function boot() {
   });
 
   // Start agent brain loop if API key is set
-  if (process.env.OPENAI_API_KEY) {
+  if (process.env.AI_API_KEY) {
     startAgentLoop();
   } else {
-    console.log('[BOOT] No OPENAI_API_KEY set. Agent brain disabled.');
-    console.log('[BOOT] Set OPENAI_API_KEY in .env to enable autonomous decisions.\n');
+    console.log('[BOOT] No AI_API_KEY set. Agent brain disabled.');
+    console.log('[BOOT] Set AI_API_KEY in .env to enable autonomous decisions.\n');
   }
 }
 
