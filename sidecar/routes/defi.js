@@ -1,100 +1,112 @@
 /**
- * DeFi Routes - Swap, lend, yield rates, positions
+ * NullClaw DeFi Routes
+ * Real WDK protocol endpoints -- Swap (Velora), Lending (Aave), Bridge (USDT0)
  */
+
 import { Router } from 'express';
-import * as wdk from '../wdk-mock.js';
+import * as wdkManager from '../wdk-manager.js';
 
 const router = Router();
+const defi = () => wdkManager.getEvmDefi();
 
-const MOCK_RATES = {
-  aave: {
-    USDT: { apy: '4.2%', tvl: '$2.1B', utilization: '78%' },
-    ETH: { apy: '3.1%', tvl: '$5.4B', utilization: '62%' },
-  },
-  velora: {
-    'USDT-ETH': { apy: '12.5%', tvl: '$450M', type: 'LP' },
-    'USDT-XAUT': { apy: '8.3%', tvl: '$120M', type: 'LP' },
-  },
-};
-
-const MOCK_POSITIONS = [
-  {
-    id: 'pos_001',
-    protocol: 'aave',
-    token: 'USDT',
-    amount: '500.00',
-    apy: '4.2%',
-    earned: '1.75',
-    since: '2026-03-01T00:00:00Z',
-  },
-  {
-    id: 'pos_002',
-    protocol: 'velora',
-    pair: 'USDT-ETH',
-    amount: '200.00',
-    apy: '12.5%',
-    earned: '2.08',
-    since: '2026-03-05T00:00:00Z',
-  },
-];
-
-router.get('/rates', (_req, res) => {
-  res.json({
-    success: true,
-    data: MOCK_RATES,
-    timestamp: new Date().toISOString(),
-  });
-});
-
-router.get('/positions', (_req, res) => {
-  res.json({
-    success: true,
-    data: MOCK_POSITIONS,
-    timestamp: new Date().toISOString(),
-  });
-});
-
+/**
+ * POST /api/defi/swap
+ * Swap tokens via Velora DEX
+ * Body: { fromToken, toToken, amount }
+ */
 router.post('/swap', async (req, res) => {
   try {
-    const { from, to, amount } = req.body;
-    if (!from || !to || !amount) {
-      return res.status(400).json({ success: false, error: 'Missing required fields: from, to, amount' });
+    const { fromToken, toToken, amount } = req.body;
+    if (!fromToken || !toToken || !amount) {
+      return res.status(400).json({ success: false, error: 'Required: fromToken, toToken, amount' });
     }
-
-    const receipt = await wdk.swap(null, { from, to, amount });
-
-    req.app.locals.broadcast({
-      type: 'agent_action',
-      action: 'swap',
-      summary: `Swapped ${amount} ${from} -> ${receipt.to.amount} ${to}`,
-      data: receipt,
-      timestamp: new Date().toISOString(),
-    });
-
-    res.json({ success: true, data: receipt });
+    const result = await defi().swap({ fromToken, toToken, amount });
+    res.json(result);
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
+/**
+ * GET /api/defi/quote
+ * Get swap quote without executing
+ * Query: ?fromToken=USDT&toToken=WETH&amount=100
+ */
+router.get('/quote', async (req, res) => {
+  try {
+    const { fromToken, toToken, amount } = req.query;
+    if (!fromToken || !toToken || !amount) {
+      return res.status(400).json({ success: false, error: 'Required query: fromToken, toToken, amount' });
+    }
+    const quote = await defi().getSwapQuote({ fromToken, toToken, amount });
+    res.json({ success: true, data: quote });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/defi/lend
+ * Aave lending operations
+ * Body: { action: 'supply'|'withdraw'|'borrow'|'repay', token, amount }
+ */
 router.post('/lend', async (req, res) => {
   try {
-    const { token, amount, protocol } = req.body;
-    if (!token || !amount || !protocol) {
-      return res.status(400).json({ success: false, error: 'Missing required fields: token, amount, protocol' });
+    const { action, token, amount } = req.body;
+    if (!action || !token || !amount) {
+      return res.status(400).json({ success: false, error: 'Required: action, token, amount' });
     }
+    const validActions = ['supply', 'withdraw', 'borrow', 'repay'];
+    if (!validActions.includes(action)) {
+      return res.status(400).json({ success: false, error: `action must be: ${validActions.join(', ')}` });
+    }
+    const result = await defi().lend({ action, token, amount });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 
-    const receipt = await wdk.lend(null, { token, amount, protocol });
+/**
+ * GET /api/defi/positions
+ * Get Aave lending positions and health factor
+ */
+router.get('/positions', async (req, res) => {
+  try {
+    const positions = await defi().getLendingPositions();
+    res.json({ success: true, data: positions });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 
-    req.app.locals.broadcast({
-      type: 'agent_action',
-      action: 'lend',
-      summary: `Lent ${amount} ${token} on ${protocol} (${receipt.apy} APY)`,
-      data: receipt,
-      timestamp: new Date().toISOString(),
-    });
+/**
+ * POST /api/defi/bridge
+ * Bridge USDT0 to another EVM chain
+ * Body: { toChainId, amount }
+ */
+router.post('/bridge', async (req, res) => {
+  try {
+    const { toChainId, amount } = req.body;
+    if (!toChainId || !amount) {
+      return res.status(400).json({ success: false, error: 'Required: toChainId, amount' });
+    }
+    const result = await defi().bridge({ toChainId, amount });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 
-    res.json({ success: true, data: receipt });
+/**
+ * GET /api/defi/protocols
+ * Get status of all DeFi protocol integrations
+ */
+router.get('/protocols', async (req, res) => {
+  try {
+    const evmWallet = wdkManager.getChainWallet('evm');
+    const status = evmWallet.getProtocolStatus();
+    res.json({ success: true, data: status });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
