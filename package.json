@@ -1,7 +1,7 @@
 {
   "name": "nullclaw-defi-agent",
-  "version": "0.1.0",
-  "description": "Autonomous DeFi Agent powered by NullClaw (Zig) + Tether WDK -- Hackathon Galactica submission",
+  "version": "0.2.0",
+  "description": "Autonomous DeFi Agent powered by NullClaw + Tether WDK -- Multi-chain (EVM + Solana) with LLM-driven decision engine",
   "private": true,
   "license": "Apache-2.0",
   "type": "module",
@@ -13,13 +13,28 @@
     "start": "node start.js",
     "start:sidecar": "cd sidecar && node server.js",
     "start:ui": "cd ui && npx vite preview --host 0.0.0.0 --port ${PORT:-5173}",
-    "setup": "npm install && cd sidecar && npm install && cd ../ui && npm install",
-    "preview": "npm run build && npm run start:ui"
+    "install:all": "npm install && cd sidecar && npm install && cd ../ui && npm install",
+    "setup": "npm run install:all && cp -n env.example .env || true",
+    "preview": "npm run build && npm run start:ui",
+    "lint": "cd ui && npx eslint src/"
   },
   "devDependencies": {
     "concurrently": "^9.1.0"
   },
   "engines": {
     "node": ">=20.0.0"
-  }
+  },
+  "keywords": [
+    "defi",
+    "agent",
+    "tether",
+    "wdk",
+    "multi-chain",
+    "evm",
+    "solana",
+    "autonomous",
+    "llm",
+    "aave",
+    "velora"
+  ]
 }
