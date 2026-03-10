@@ -28,6 +28,10 @@ const MAX_HISTORY = 100;
 // Pending decisions awaiting user confirmation
 const pendingDecisions = new Map();
 
+// Anti-spam: log-once + cooldown
+let _consecutiveFailures = 0;
+let _apiKeyWarningLogged = false;
+
 // Agent configuration
 const AGENT_CONFIG = {
   analysisInterval: 60_000, // Analyze every 60s
@@ -84,7 +88,17 @@ Respond ONLY with valid JSON in this exact format:
  */
 export async function analyze(broadcastFn = null) {
   if (!process.env.AI_API_KEY) {
-    console.log('[BRAIN] No AI_API_KEY set, skipping analysis');
+    if (!_apiKeyWarningLogged) {
+      console.log('[BRAIN] No AI_API_KEY set, skipping analysis (will not log again)');
+      _apiKeyWarningLogged = true;
+    }
+    return null;
+  }
+
+  // Cooldown: after 3 consecutive failures, skip one cycle then reset
+  if (_consecutiveFailures >= 3) {
+    console.log('[BRAIN] Cooldown after 3 consecutive failures, will retry next cycle');
+    _consecutiveFailures = 0;
     return null;
   }
 
@@ -100,7 +114,13 @@ export async function analyze(broadcastFn = null) {
 
     try {
       const evmDefi = wdkManager.getEvmDefi();
-      lendingPositions = await evmDefi.getLendingPositions();
+      if (evmDefi) {
+        lendingPositions = await evmDefi.getLendingPositions();
+        // If chain unsupported, don't treat as error data for LLM
+        if (lendingPositions?.unsupported) {
+          lendingPositions = null;
+        }
+      }
     } catch (e) {
       // Lending might not be initialized
     }
@@ -149,9 +169,13 @@ export async function analyze(broadcastFn = null) {
     }
 
     console.log(`[BRAIN] Analysis complete: ${decisions.length} decisions, health: ${response.portfolioHealth}`);
+    _consecutiveFailures = 0; // reset on success
     return result;
   } catch (err) {
-    console.error('[BRAIN] Analysis failed:', err.message);
+    _consecutiveFailures++;
+    if (_consecutiveFailures <= 1) {
+      console.error('[BRAIN] Analysis failed:', err.message);
+    }
     return { error: err.message };
   }
 }
