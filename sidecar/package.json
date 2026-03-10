@@ -1,15 +1,25 @@
 {
-  "name": "nullclaw-wdk-sidecar",
-  "version": "0.1.0",
+  "name": "nullclaw-sidecar",
+  "version": "0.2.0",
+  "description": "NullClaw DeFi Agent backend -- WDK multi-chain wallet + LLM brain",
+  "private": true,
   "type": "module",
+  "license": "Apache-2.0",
   "scripts": {
-    "dev": "node --watch server.js",
-    "start": "node server.js"
+    "start": "node server.js",
+    "dev": "node --watch server.js"
   },
   "dependencies": {
-    "express": "^4.18.2",
+    "@tetherto/wdk": "^1.0.0-beta",
+    "@tetherto/wdk-wallet-evm": "^1.0.0-beta",
+    "@tetherto/wdk-wallet-solana": "^1.0.0-beta",
+    "@tetherto/wdk-protocol-swap-velora-evm": "^1.0.0-beta",
+    "@tetherto/wdk-protocol-lending-aave-evm": "^1.0.0-beta",
+    "@tetherto/wdk-protocol-bridge-usdt0-evm": "^1.0.0-beta",
+    "openai": "^4.73.0",
+    "express": "^4.21.0",
     "cors": "^2.8.5",
-    "ws": "^8.16.0",
-    "dotenv": "^16.4.5"
+    "dotenv": "^16.4.5",
+    "ws": "^8.18.0"
   }
 }
