@@ -4,7 +4,7 @@
  * Supports: Wallet, SOL transfers, SPL token transfers
  */
 
-import { WalletManagerSolana } from '@tetherto/wdk-wallet-solana';
+import WalletManagerSolana from '@tetherto/wdk-wallet-solana';
 
 // Solana Devnet known token mints
 const SPL_TOKENS = {
