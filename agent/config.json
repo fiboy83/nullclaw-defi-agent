@@ -1,114 +1,123 @@
 {
-  "name": "NullClaw DeFi Agent",
-  "version": "0.1.0",
-  "identity": {
-    "role": "Autonomous DeFi Portfolio Manager",
-    "personality": "Analytical, risk-aware, decisive. Reports findings in concise format.",
-    "prompt_file": "./agent/identity.md"
+  "agent": {
+    "name": "NullClaw",
+    "version": "0.2.0",
+    "framework": "nullclaw",
+    "description": "Autonomous DeFi Agent with multi-chain WDK integration and LLM-powered decision engine",
+    "license": "Apache-2.0"
   },
-  "memory": {
-    "backend": "file",
-    "path": "./agent/memory/"
-  },
-  "tools": [
-    {
-      "name": "check_market",
-      "type": "http_request",
-      "description": "Get market prices, sentiment, and theme recommendation",
-      "config": { "method": "GET", "url": "http://localhost:3001/api/market/summary" }
+  "chains": {
+    "evm": {
+      "enabled": true,
+      "network": "sepolia",
+      "chainId": 11155111,
+      "rpcUrl": "https://ethereum-sepolia-rpc.publicnode.com",
+      "explorer": "https://sepolia.etherscan.io",
+      "faucet": "https://sepoliafaucet.com",
+      "tokens": {
+        "USDT": "0x7169D38820dfd117C3FA1f22a697dBA58d90BA06",
+        "WETH": "0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14",
+        "USDC": "0x94a9D9AC8a22534E3FaCa9F4e7F2E2cf85d5E4C8",
+        "DAI": "0xFF34B3d4Aee8ddCd6F9AFFFB6Fe49bD371b8a357"
+      }
     },
-    {
-      "name": "check_balances",
-      "type": "http_request",
-      "description": "Get current wallet token balances",
-      "config": { "method": "GET", "url": "http://localhost:3001/api/wallet/balances" }
-    },
-    {
-      "name": "get_wallet_address",
-      "type": "http_request",
-      "description": "Get the agent wallet address",
-      "config": { "method": "GET", "url": "http://localhost:3001/api/wallet/address" }
-    },
-    {
-      "name": "check_yields",
-      "type": "http_request",
-      "description": "Get current DeFi yield rates across protocols",
-      "config": { "method": "GET", "url": "http://localhost:3001/api/defi/rates" }
-    },
-    {
-      "name": "check_positions",
-      "type": "http_request",
-      "description": "Get active DeFi positions",
-      "config": { "method": "GET", "url": "http://localhost:3001/api/defi/positions" }
-    },
-    {
-      "name": "execute_swap",
-      "type": "http_request",
-      "description": "Swap tokens via DEX",
-      "config": { "method": "POST", "url": "http://localhost:3001/api/defi/swap" }
-    },
-    {
-      "name": "execute_lend",
-      "type": "http_request",
-      "description": "Lend tokens to earn yield",
-      "config": { "method": "POST", "url": "http://localhost:3001/api/defi/lend" }
-    },
-    {
-      "name": "send_tokens",
-      "type": "http_request",
-      "description": "Send tokens to an address",
-      "config": { "method": "POST", "url": "http://localhost:3001/api/wallet/send" }
+    "solana": {
+      "enabled": true,
+      "network": "devnet",
+      "rpcUrl": "https://api.devnet.solana.com",
+      "explorer": "https://explorer.solana.com/?cluster=devnet",
+      "faucet": "https://faucet.solana.com",
+      "tokens": {
+        "USDT": "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
+        "USDC": "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"
+      }
     }
-  ],
+  },
+  "protocols": {
+    "swap": {
+      "provider": "velora",
+      "module": "@tetherto/wdk-protocol-swap-velora-evm",
+      "chains": ["evm"],
+      "maxSlippage": 0.5,
+      "maxFeeWei": "200000000000000"
+    },
+    "lending": {
+      "provider": "aave-v3",
+      "module": "@tetherto/wdk-protocol-lending-aave-evm",
+      "chains": ["evm"],
+      "minHealthFactor": 1.5
+    },
+    "bridge": {
+      "provider": "usdt0",
+      "module": "@tetherto/wdk-protocol-bridge-usdt0-evm",
+      "chains": ["evm"]
+    }
+  },
+  "llm": {
+    "provider": "openai",
+    "model": "gpt-4o-mini",
+    "temperature": 0.3,
+    "maxTokens": 1500,
+    "analysisIntervalMs": 60000,
+    "optimizeIntervalMs": 300000
+  },
+  "risk": {
+    "maxSingleTradePercent": 0.2,
+    "maxPortfolioRiskPercent": 0.5,
+    "healthFactorWarning": 1.5,
+    "healthFactorCritical": 1.1,
+    "minGasReserve": {
+      "evm": "0.01",
+      "solana": "0.05"
+    },
+    "requireConfirmation": true,
+    "autoRejectAboveUsd": 1000
+  },
   "skills": [
     {
-      "name": "market_analysis",
-      "trigger": "every 60 seconds",
-      "description": "Continuous market monitoring and sentiment analysis",
-      "steps": [
-        "Call check_market tool",
-        "Analyze sentiment score and price trends",
-        "If sentiment < 20 and portfolio > 50% stables: flag potential buying opportunity",
-        "If sentiment > 80 and portfolio > 50% volatile: flag profit-taking opportunity",
-        "Broadcast decision summary to WebSocket for UI update"
-      ]
+      "id": "portfolio-monitor",
+      "name": "Cross-Chain Portfolio Monitor",
+      "description": "Continuously monitors balances and positions across EVM and Solana",
+      "trigger": "interval",
+      "interval": 30000
     },
     {
-      "name": "yield_optimization",
-      "trigger": "every 300 seconds",
-      "description": "Monitor and optimize DeFi yield positions",
-      "steps": [
-        "Call check_yields tool to get current rates",
-        "Call check_positions to see active allocations",
-        "Compare current positions vs best available rates",
-        "If better rate available with < 0.5% slippage: recommend rebalance",
-        "Broadcast finding to WebSocket"
-      ]
+      "id": "yield-optimizer",
+      "name": "Aave Yield Optimizer",
+      "description": "Analyzes Aave rates and suggests optimal supply/borrow strategies",
+      "trigger": "interval",
+      "interval": 300000
     },
     {
-      "name": "risk_monitor",
-      "trigger": "every 120 seconds",
-      "description": "Monitor portfolio risk levels and enforce limits",
-      "steps": [
-        "Call check_balances to get current allocations",
-        "Calculate stable vs volatile ratio",
-        "If stable ratio < 30%: ALERT and recommend de-risk",
-        "If any single position > 10% of portfolio: ALERT concentration risk",
-        "Broadcast risk status to WebSocket"
-      ]
+      "id": "risk-guardian",
+      "name": "Liquidation Risk Guardian",
+      "description": "Monitors health factor and triggers emergency repay if needed",
+      "trigger": "threshold",
+      "threshold": "healthFactor < 1.2"
+    },
+    {
+      "id": "swap-scout",
+      "name": "Swap Opportunity Scout",
+      "description": "Identifies favorable swap conditions via Velora quotes",
+      "trigger": "interval",
+      "interval": 120000
+    },
+    {
+      "id": "rebalancer",
+      "name": "Cross-Chain Rebalancer",
+      "description": "Suggests bridging or transfers to maintain target allocation",
+      "trigger": "deviation",
+      "deviationPercent": 10
     }
   ],
-  "risk_limits": {
-    "max_single_trade_pct": 10,
-    "max_daily_trades": 20,
-    "min_stable_reserve_pct": 30,
-    "slippage_tolerance_pct": 0.5,
-    "max_gas_gwei": 50,
-    "cool_down_after_trade_sec": 30
-  },
-  "websocket": {
-    "url": "ws://localhost:3001",
-    "broadcast_actions": true,
-    "broadcast_sentiment": true
+  "api": {
+    "sidecarPort": 3001,
+    "endpoints": {
+      "wallet": "/api/wallet",
+      "defi": "/api/defi",
+      "market": "/api/market",
+      "agent": "/api/agent",
+      "health": "/api/health"
+    }
   }
 }
